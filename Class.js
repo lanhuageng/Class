@@ -223,7 +223,7 @@
 					loadScript(url, function(success, text, status) {
 						if (success) {
 							if (isLocal()) {
-								return console.warn("Local script load, not confirm result：" + url);
+								return console.warn("Local script load, not confirm result:" + url);
 							}
 							var time = new Date().getTime() - info.start;
 							if (time < config.timeout) {
@@ -370,11 +370,12 @@
 		    Array.prototype.push.apply(args, arguments);
 		    args.splice(0, 1, clazz);
 
-		    var strArgs = [], seed = 97, len = args.length;
-		    for (var i = 0; i < len; i++) {
-			    strArgs.push(String.fromCharCode(seed));
+		    var allArgs = [ "a" ], strArgs = [], seed = 97, len = args.length;
+		    for (var i = 1; i < len; i++) {
+			    strArgs.push(String.fromCharCode(seed + i));
 		    }
-		    var str = strArgs.join(","), fn = Function(str, "return new a(" + str + ");");
+		    Array.prototype.push.apply(allArgs, strArgs);
+		    var fn = Function(allArgs.join(","), "return new a(" + strArgs.join(",") + ");");
 		    return fn.apply(null, args);
 	    },
 	    isDefined : isDefined,
