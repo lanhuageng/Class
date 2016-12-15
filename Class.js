@@ -1,60 +1,314 @@
-+function(global) {
-	/**
-	 * 类定义器
-	 * @param {String} [className] 类名称，唯一
-	 * @param {String/Object} [parent] 父类或其名称，该参数可忽略，直接传第三个参数
-	 * @param {Object} [cfg] 类属性，分私有(privates)、公共(publics)、静态(statics)
-	 */
-	var Class = function(className, parentName, cfg) {
-		var thiz = Class.classes;
-		// validate
-		if (!Class.isString(className)) {
-			throw "Error class name.";
+/**
+ */
++(function(g) {
+
+	var config = {
+	    // class name must equal file name.
+	    strict : true,
+	    // debug:ajax load class, not debug:compress js load.
+	    debug : false,
+	    // in debug mode, paths mapping for class of roots.
+	    mapping : {},
+	    // timeout for load script.
+	    timeout : 30000
+	};
+	var loading = {}, classes = {}, ready;
+	var NONE = undefined, LOADING = 1, SUCCESS = 2, FAIL = 3;
+	var regClassName = /^[_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+$/;
+	var regImport = /Class\((["'"])([_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+)\1,/;
+	var keyField = [ "_class", "_className", "_superClass", "parent", "callParent" ];
+
+	// main method.
+	function Class(className, parentName, cfg) {
+		var args = arguments, len = args.length;
+		if (len == 2) {
+			cfg = args[1];
+			parentName = null;
 		}
-		if (thiz[className]) {
-			throw "Class '" + className + "' is exists.";
+		valid(isString(className) && regClassName.test(className), "Define class name error.");
+		valid(isNone(parentName) || (isString(parentName) && regClassName.test(parentName)), "Define class parentName error.");
+		valid(isObject(cfg), "Define class config error.");
+
+		valid(!isDefined(className), "Class is defined:" + className);
+		valid(isNone(cfg.imports) || isArray(cfg.imports), "")
+
+		build(className, parentName, cfg, function(clazz) {
+			if (isFunction(clazz.initialize)) {
+				clazz.initialize();
+			}
+		});
+	}
+
+	function OnceDeferred() {
+		var clazz = Function(), fns = [];
+		copy(clazz, {
+		    isTriggered : false,
+		    trigger : function() {
+			    var me = this;
+			    me.isTriggered = true;
+			    for (var i = 0; i < fns.length; i++) {
+				    fns[i](me);
+			    }
+			    fns = [];
+		    },
+		    add : function(fn) {
+			    var me = this;
+			    fns.push(fn);
+			    me.isTriggered && me.trigger();
+		    }
+		});
+		return clazz;
+	}
+	function loadScript(url, fn, sync) {
+		if (isLocal()) {
+			return localLoadScript(url, fn, sync);
 		}
-		if (!Class.isString(parentName)) {
-			cfg = parentName;
-			parentName = undefined;
+		var xhr = null;
+		if (window.XMLHttpRequest) {
+			xhr = new XMLHttpRequest();
+		} else if (window.ActiveXObject) {
+			xhr = new ActiveXObject("Microsoft.XMLHTTP");
 		}
-		cfg = cfg || {};
-		var constructor = cfg.constructor || Function();
-		if (!Class.isFunction(constructor)) {
-			throw "Error constructor in define " + className;
+		valid(xhr, "Error:create XMLHttpRequest.");
+
+		xhr.onreadystatechange = function(resp) {
+			if (xhr.readyState == 4) {
+				fn(xhr.status == 200, xhr.responseText, xhr.status);
+			}
+		};
+		if (!sync) {
+			xhr.timeout = config.timeout;
 		}
-		if (!Class.isNone(parentName) && (!Class.isDefine(parentName))) {
-			throw "Error parent, or parent not exists in define " + className;
-		} else if (className === parentName) {
-			throw "Error parent in define " + className;
+		xhr.open("GET", url, !sync);
+		try {
+			xhr.send();
+		} catch (e) {
+			console.warn(e);
+			fn(false, "", xhr.status);
+		}
+	}
+	function localLoadScript(url, fn, sync) {
+		var script = document.createElement("script");
+		script.src = url;
+		script.async = !sync;
+		script.onload = function() {
+			fn(true);
+			document.head.removeChild(script);
+		}
+		script.onerror = function() {
+			fn(false);
+			document.head.removeChild(script);
+		}
+		document.head.appendChild(script);
+	}
+	function valid(exp, msg) {
+		if (!exp) {
+			throw msg || "Error";
+		}
+	}
+	function defaults(v, df) {
+		return isNone(v) ? df : v;
+	}
+	function isType(o, type) {
+		return Object.prototype.toString.call(o) === "[object " + type + "]";
+	}
+	function isString(o) {
+		return ("string" === typeof (o)) || isType(o, "String");
+	}
+	function isFunction(o) {
+		return "function" === typeof (o);
+	}
+	function isNone(o) {
+		return undefined === o || null === o;
+	}
+	function isObject(o) {
+		return isType(o, "Object");
+	}
+	function isArray(o) {
+		return isType(o, "Array");
+	}
+	function isArrayType(o, type) {
+		var len = o.length;
+		for (var i = 0; i < len; i++) {
+			if (!isType(o[i], type)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	function isCopyable(scope, k) {
+		if (!scope.hasOwnProperty(k)) {
+			return false;
+		} else if (inArray(k, keyField)) {
+			return false;
+		}
+		return true;
+	}
+	function isLocal() {
+		return location.href.indexOf("file://") != -1
+	}
+	function isDefined(className) {
+		return null != getClass(className);
+	}
+	function inArray(o, arr) {
+		return -1 != arr.indexOf(o);
+	}
+	function getClassInfo(className) {
+		var info = classes[className];
+		if (isNone(info)) {
+			info = (classes[className] = {
+			    state : NONE,
+			    start : new Date().getTime(),
+			    notify : OnceDeferred()
+			});
+			loading[className] = LOADING;
+			ready.isTriggered = false;
+			setTimeout(function() {
+				if (SUCCESS != info.state && FAIL != info.state) {
+					info.state = FAIL;
+					console.warn("Load script timeout:" + className);
+				}
+			}, config.timeout);
+		}
+		return info;
+	}
+	function getClass(className) {
+		var info = getClassInfo(className);
+		return SUCCESS == info.state ? info._class : null;
+	}
+	function add(className, fn) {
+		getClassInfo(className).notify.add(fn);
+	}
+	function checkReady(className) {
+		if (className) {
+			delete loading[className];
+		}
+		var count = 0;
+		for ( var k in loading) {
+			if (loading.hasOwnProperty(k)) {
+				count++;
+			}
+		}
+		if (count === 0) {
+			ready.trigger();
+		}
+	}
+	function copy(o1, o2) {
+		if (o1 && o2) {
+			for ( var k in o2) {
+				if (isCopyable(o2, k)) {
+					o1[k] = o2[k];
+				}
+			}
+		}
+	}
+	function importClass(className, fn, needValid) {
+		if (needValid) {
+			valid(isString(className) && regClassName.test(className), "Preload class name error:" + className);
 		}
 
-		var build = function(className, privates, publics, statics, constructor, parentName) {
-			var clazz = thiz[className];
-			privates = privates || {};
-			publics = publics || {};
-			statics = statics || {};
-			// constructor
-			clazz.constructor = constructor;
-			// Class,name
-			clazz.prototype._class = clazz;
-			clazz.prototype._className = (clazz._className = className);
-			// toString
-			clazz.toString = clazz.prototype.toString = function() {
-				return "class " + this._className;
-			};
-			// parent
-			if (parentName) {
-				var parent = thiz[parentName];
-				for ( var k in parent.prototype) {
-					if (u.isCopyable(parent.prototype, k, className)) {
-						clazz.prototype[k] = parent.prototype[k];
-					}
+		if (isDefined(className)) {
+			fn();
+		} else {
+			var info = getClassInfo(className), state = info.state;
+			info.notify.add(fn);
+			if (LOADING != state) {
+				valid(FAIL != state, "Last load class fail:" + className);
+				if (config.debug) {
+					var arr = className.split("."), root = arr[0], prefix = config.mapping[root];
+					valid(prefix, "Not found “" + root + "” mapping.");
+
+					arr[0] = prefix;
+					var url = arr.join("/") + ".js";
+					loadScript(url, function(success, text, status) {
+						if (success) {
+							if (isLocal()) {
+								return console.warn("Local script load, not confirm result：" + url);
+							}
+							var time = new Date().getTime() - info.start;
+							if (time < config.timeout) {
+								var temp = regImport.exec(text), target = (temp || [])[2];
+								valid(target, "Load script“" + url + "” error.");
+								if (config.strict) {
+									valid(target == className, "Import class:" + className + "，but really import:" + target);
+								}
+								eval(text);
+							}
+						} else {
+							info.state = FAIL;
+							console.error("Load script error:" + className);
+						}
+					});
 				}
+			}
+		}
+	}
+	function importClasses(imports, fn) {
+		var len = imports.length;
+		+function(i) {
+			var current = arguments;
+			if (i < len) {
+				importClass(imports[i], function() {
+					current.callee(i + 1);
+				}, true);
+			} else {
+				fn();
+			}
+		}(0);
+	}
+
+	function build(className, parentName, cfg) {
+		var info = getClassInfo(className), clazz = function() {
+			var me = this;
+			me.parent && me.callParent(arguments);
+			me._class.constructor.apply(me, arguments);
+		};
+		clazz.constructor = cfg.constructor || Function();
+		clazz.prototype._class = clazz;
+		clazz.prototype._className = (clazz._className = className);
+
+		// state change.
+		info.state = LOADING;
+
+		var deferContent = OnceDeferred();
+		deferContent.add(function() {
+			copy(clazz, cfg.statics);
+			delete cfg.statics;
+
+			copy(clazz.prototype, cfg);
+
+			var deferInit = OnceDeferred();
+			deferInit.add(function() {
+				if (isFunction(clazz.initialize)) {
+					clazz.initialize();
+				}
+				info._class = clazz;
+				info.state = SUCCESS;
+				info.notify.trigger();
+
+				checkReady(className);
+			});
+
+			var imports = cfg.imports;
+			if (isArray(imports)) {
+				valid(isArrayType(imports, "String"), "config imports type must be String.");
+				importClasses(imports, function() {
+					deferInit.trigger();
+				});
+			} else {
+				deferInit.trigger();
+			}
+		});
+
+		if (parentName) {
+			var deferParent = OnceDeferred();
+			deferParent.add(function() {
+				var parent = getClass(parentName);
+				copy(clazz.prototype, parent.prototype);
+
 				clazz._superClass = parent;
 				clazz.prototype.parent = parent.prototype;
 
-				// call parent constructor
 				clazz.prototype.callParent = function(args, _class) {
 					_class = _class || this._class;
 					var parentClass = _class._superClass;
@@ -65,178 +319,67 @@
 						parentClass.constructor.apply(this, args);
 					}
 				};
-			}
-			// static
-			Class.copy(clazz, statics);
-			var temp = {};
-			// privates
-			for ( var k in privates) {
-				if (u.isCopyable(privates, k, className, true)) {
-					temp[k] = privates[k];
-				}
-			}
-			// public
-			for ( var k in publics) {
-				if (u.isCopyable(publics, k, className, true)) {
-					if (temp[k]) {
-						console.log(className + " public property is cover private property:" + k);
-					}
-					temp[k] = publics[k];
-				}
-			}
-			for ( var k in temp) {
-				if (u.isCopyable(temp, k, className, true)) {
-					if (clazz.prototype[k]) {
-						console.log(className + " override property:" + k);
-					}
-					clazz.prototype[k] = temp[k];
-				}
-			}
-		};
-		// class constructor
-		var clazz = (thiz[className] = function() {
-			var me = this;
-			me.parent && me.callParent(arguments);
-			me._class.constructor.apply(me, arguments);
-		});
-
-		build(className, cfg.privates, cfg.publics, cfg.statics, constructor, parentName);
-
-		return clazz;
-	};
-
-	/** 将o2的数据拷贝到o1,[ignoreNone=false]表示是否忽略空值 */
-	Class.copy = function(o1, o2, ignoreNone) {
-		if (o1 && o2) {
-			for ( var k in o2) {
-				var v = o2[k];
-				if (o2.hasOwnProperty(k) && (!ignoreNone || (ignoreNone && undefined !== v && null !== v))) {
-					o1[k] = v;
-				}
-			}
-		}
-		return o1;
-	};
-
-	// common function
-	Class.copy(Class, {
-		/** 存储所有定义的类 */
-		classes : {},
-		/** 按名称实例类，后续可传构造参数 */
-		create : function(className) {
-			var _class = Class.classes[className], args = [];
-			if (!_class) {
-				throw "not found class:" + className;
-			}
-			args.push.apply(args, arguments);
-			args.splice(0, 1);
-
-			var strArgs = [], seed = new Date().getTime(), len = args.length;
-			global["_" + seed] = {};
-			for (var i = 0; i < len; i++) {
-				global["_" + seed]["_" + i] = args[i];
-				strArgs.push("_" + seed + "._" + i);
-			}
-			var obj = eval("new Class.classes['" + className + "'](" + strArgs.join(",") + ")");
-			delete global["_" + seed];
-			return obj;
-		},
-		/** 将o2的数据拷贝到o1，只为o1中未无数据项赋值 */
-		copyIfNull : function(o1, o2) {
-			if (o1 && o2) {
-				for ( var k in o2) {
-					var v = o1[k];
-					if (o2.hasOwnProperty(k) && (undefined === v || null === v)) {
-						o1[k] = o2[k];
-					}
-				}
-			}
-			return o1;
-		},
-		/** 只为o1中未定义的数据赋值 */
-		copyIfUndefined : function(o1, o2) {
-			if (o1 && o2) {
-				for ( var k in o2) {
-					if (o2.hasOwnProperty(k) && undefined === o1[k]) {
-						o1[k] = o2[k];
-					}
-				}
-			}
-			return o1;
-		},
-		/** 是否定义类 */
-		isDefine : function(className) {
-			return !Class.isNone(Class.classes[className]);
-		},
-		/** 是否是方法 */
-		isFunction : function(v) {
-			return "function" === typeof v;
-		},
-		/** 是否是字符串 */
-		isString : function(v) {
-			return "string" === typeof v;
-		},
-		/** 是否空（undefined||null） */
-		isNone : function(v) {
-			return undefined === v || null === v;
-		},
-		/** 绑定方法作用域（extraArgs为额外参数，类型数组） */
-		bind : function(fn, scope, extraArgs) {
-			return function() {
-				var args = [];
-				args.push.apply(args, arguments);
-				if (extraArgs) {
-					args.push.apply(args, extraArgs);
-				}
-				return fn.apply(scope || this, args);
-			};
-		},
-		/** 字面量取值。如var a = {b:{c:{cc:1,dd:2}}};Class.get(a,"b.c.cc");//=1 */
-		get : function(obj, k) {
-			if (obj) {
-				if (Class.isString(k)) {
-					var idx = k.indexOf(".");
-					if (idx > 0) {
-						var f = k.substr(0, idx), p = k.substr(idx + 1);
-						return Class.get(obj[f], p);
-					} else {
-						return obj[k];
-					}
-				}
-				return obj;
-			}
-		},
-		/** 格式化字符串 */
-		format : function(s, o) {
-			if (Class.isString(s)) {
-				return s.replace(/\{\{([a-zA-Z0-9_.]+)\}\}/g, function(all, name) {
-					var value = Class.get(o, name);
-					return Class.isNone(value) ? "" : value;
+				deferContent.trigger();
+			});
+			if (isDefined(parentName)) {
+				deferParent.trigger();
+			} else {
+				importClass(parentName, function() {
+					deferParent.trigger();
 				});
 			}
-			return s;
+		} else {
+			deferContent.trigger();
 		}
-	});
-	// 私有的辅助对象
-	var u = {
-		isCopyable : function(scope, k, className, log) {
-			if (!scope.hasOwnProperty(k)) {
-				log && console.log("can not create property '" + k + "' in class:" + className + ",not is own property.");
-				return false;
-			} else if (-1 != [ "_class", "_className", "_superClass", "parent", "callParent", "toString" ].indexOf(k)) {
-				log && console.log("can not create property '" + k + "' in class:" + className + ",this key is keyword.");
-				return false;
-			}
-			return true;
-		},
-		nameOf : function(fn) {
-			for ( var k in Class.classes) {
-				if (fn === Class.classes[k]) {
-					return k;
-				}
-			}
-		}
-	};
+	}
 
-	global.Class = Class;
-}(this);
+	// instance more
+	ready = OnceDeferred();
+	ready.isTriggered = true;
+
+	copy(Class, {
+	    ready : function(imports, fn) {
+		    if (isFunction(imports)) {
+			    ready.add(imports);
+		    } else {
+			    importClasses(isArray(imports) ? imports : [ imports ], function() {
+				    isFunction(fn) && ready.add(fn);
+			    });
+		    }
+	    },
+	    config : function(cfg) {
+		    if (isObject(cfg)) {
+			    for ( var k in config) {
+				    if ("mapping" != k) {
+					    config[k] = defaults(cfg[k], config[k]);
+					    delete cfg[k];
+				    }
+			    }
+
+			    for ( var k in cfg) {
+				    var v = cfg[k];
+				    if (cfg.hasOwnProperty(k) && isString(v)) {
+					    config.mapping[k] = v;
+				    }
+			    }
+		    }
+	    },
+	    create : function(className) {
+		    var clazz = getClass(className), args = [];
+		    valid(clazz, "The class is undefined:" + className);
+		    Array.prototype.push.apply(args, arguments);
+		    args.splice(0, 1, clazz);
+
+		    var strArgs = [], seed = 97, len = args.length;
+		    for (var i = 0; i < len; i++) {
+			    strArgs.push(String.fromCharCode(seed));
+		    }
+		    var str = strArgs.join(","), fn = Function(str, "return new a(" + str + ");");
+		    return fn.apply(null, args);
+	    },
+	    isDefined : isDefined,
+	    getClass : getClass
+	});
+
+	g.Class = Class;
+})(this);
