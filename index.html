@@ -1,0 +1,19 @@
+<html>
+  <head>
+  <script type="text/javascript" src="Class.js"></script>
+  </head>
+  <body>
+  <script type="text/javascript">
+    Class.config({
+      debug : true,
+      com : "js/test"
+    });
+    // 在加载com.Person时会自动加载com.Base
+    Class.ready("com.Person",function() {
+      var person = Class.create("com.Person", "lisi");
+      person.say();
+      person.test();
+    });
+  </script>
+  </body>
+</html>
