@@ -21,7 +21,7 @@
 ```html
 <html>
   <head>
-  <script type="text/javascript" src="js/Class.js"></script>
+  <script type="text/javascript" src="Class.js"></script>
   </head>
   <body>
   <script type="text/javascript">
