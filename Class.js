@@ -1,21 +1,25 @@
 /**
+ * current alias name : Class<br>
+ * Class("com.Test", {});
  */
-+(function(g) {
++(function(g, alias) {
 
+	alias = alias || "Class"; // alias name default:Class
 	var config = {
-	    // class name must equal file name.
-	    strict : true,
-	    // debug:ajax load class, not debug:compress js load.
-	    debug : false,
-	    // in debug mode, paths mapping for class of roots.
-	    mapping : {},
-	    // timeout for load script.
-	    timeout : 30000
+		// class name must equal file name.
+		strict : true,
+		// debug:ajax load class, not debug:compress js load.
+		debug : false,
+		// in debug mode, paths mapping for class of roots.
+		mapping : {},
+		// timeout for load script.
+		timeout : 30000
 	};
 	var loading = {}, classes = {}, ready;
 	var NONE = undefined, LOADING = 1, SUCCESS = 2, FAIL = 3;
 	var regClassName = /^[_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+$/;
-	var regImport = /Class\((["'"])([_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+)\1,/;
+	// var regImport = /Class\((["'"])([_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+)\1,/;
+	var regImport = new RegExp(alias + "\\(([\"'\"])([_a-zA-Z]\\w*(\\.[_a-zA-Z]\\w*)+)\\1,");
 	var keyField = [ "_class", "_className", "_superClass", "parent", "callParent" ];
 
 	// main method.
@@ -42,20 +46,20 @@
 	function OnceDeferred() {
 		var clazz = Function(), fns = [];
 		copy(clazz, {
-		    isTriggered : false,
-		    trigger : function() {
-			    var me = this;
-			    me.isTriggered = true;
-			    for (var i = 0; i < fns.length; i++) {
-				    fns[i](me);
-			    }
-			    fns = [];
-		    },
-		    add : function(fn) {
-			    var me = this;
-			    fns.push(fn);
-			    me.isTriggered && me.trigger();
-		    }
+			isTriggered : false,
+			trigger : function() {
+				var me = this;
+				me.isTriggered = true;
+				for (var i = 0; i < fns.length; i++) {
+					fns[i](me);
+				}
+				fns = [];
+			},
+			add : function(fn) {
+				var me = this;
+				fns.push(fn);
+				me.isTriggered && me.trigger();
+			}
 		});
 		return clazz;
 	}
@@ -157,9 +161,9 @@
 		var info = classes[className];
 		if (isNone(info)) {
 			info = (classes[className] = {
-			    state : NONE,
-			    start : new Date().getTime(),
-			    notify : OnceDeferred()
+				state : NONE,
+				start : new Date().getTime(),
+				notify : OnceDeferred()
 			});
 			loading[className] = LOADING;
 			ready.isTriggered = false;
@@ -228,9 +232,9 @@
 							var time = new Date().getTime() - info.start;
 							if (time < config.timeout) {
 								var temp = regImport.exec(text), target = (temp || [])[2];
-								valid(target, "Load script“" + url + "” error.");
+								valid(target, "Load script '" + url + "' error.");
 								if (config.strict) {
-									valid(target == className, "Import class:" + className + "，but really import:" + target);
+									valid(target == className, "Import class:" + className + ", but really import:" + target);
 								}
 								eval(text);
 							}
@@ -338,49 +342,49 @@
 	ready.isTriggered = true;
 
 	copy(Class, {
-	    ready : function(imports, fn) {
-		    if (isFunction(imports)) {
-			    ready.add(imports);
-		    } else {
-			    importClasses(isArray(imports) ? imports : [ imports ], function() {
-				    isFunction(fn) && ready.add(fn);
-			    });
-		    }
-	    },
-	    config : function(cfg) {
-		    if (isObject(cfg)) {
-			    for ( var k in config) {
-				    if ("mapping" != k) {
-					    config[k] = defaults(cfg[k], config[k]);
-					    delete cfg[k];
-				    }
-			    }
+		ready : function(imports, fn) {
+			if (isFunction(imports)) {
+				ready.add(imports);
+			} else {
+				importClasses(isArray(imports) ? imports : [ imports ], function() {
+					isFunction(fn) && ready.add(fn);
+				});
+			}
+		},
+		config : function(cfg) {
+			if (isObject(cfg)) {
+				for ( var k in config) {
+					if ("mapping" != k) {
+						config[k] = defaults(cfg[k], config[k]);
+						delete cfg[k];
+					}
+				}
 
-			    for ( var k in cfg) {
-				    var v = cfg[k];
-				    if (cfg.hasOwnProperty(k) && isString(v)) {
-					    config.mapping[k] = v;
-				    }
-			    }
-		    }
-	    },
-	    create : function(className) {
-		    var clazz = getClass(className), args = [];
-		    valid(clazz, "The class is undefined:" + className);
-		    Array.prototype.push.apply(args, arguments);
-		    args.splice(0, 1, clazz);
+				for ( var k in cfg) {
+					var v = cfg[k];
+					if (cfg.hasOwnProperty(k) && isString(v)) {
+						config.mapping[k] = v;
+					}
+				}
+			}
+		},
+		create : function(className) {
+			var clazz = getClass(className), args = [];
+			valid(clazz, "The class is undefined:" + className);
+			Array.prototype.push.apply(args, arguments);
+			args.splice(0, 1, clazz);
 
-		    var allArgs = [ "a" ], strArgs = [], seed = 97, len = args.length;
-		    for (var i = 1; i < len; i++) {
-			    strArgs.push(String.fromCharCode(seed + i));
-		    }
-		    Array.prototype.push.apply(allArgs, strArgs);
-		    var fn = Function(allArgs.join(","), "return new a(" + strArgs.join(",") + ");");
-		    return fn.apply(null, args);
-	    },
-	    isDefined : isDefined,
-	    getClass : getClass
+			var allArgs = [ "a" ], strArgs = [], seed = 97, len = args.length;
+			for (var i = 1; i < len; i++) {
+				strArgs.push(String.fromCharCode(seed + i));
+			}
+			Array.prototype.push.apply(allArgs, strArgs);
+			var fn = Function(allArgs.join(","), "return new a(" + strArgs.join(",") + ");");
+			return fn.apply(null, args);
+		},
+		isDefined : isDefined,
+		getClass : getClass
 	});
 
-	g.Class = Class;
+	g[alias] = Class;
 })(this);
