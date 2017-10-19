@@ -1,18 +1,35 @@
 <html>
   <head>
-  <script type="text/javascript" src="Class.js"></script>
-  </head>
-  <body>
-  <script type="text/javascript">
-    Class.config({
-      debug : true,
+    <script type="text/javascript" src="JClass.js"></script>
+    <script type="text/javascript">
+    JClassConfig({
+      alias : "Class",
+	  debug : true,
+	  global : window,
+	  stalk : "js/stalk",
       com : "js/test"
     });
+    </script>
+	<script type="text/javascript" src="js/stalk/Log.js"></script>
+	<script type="text/javascript" src="js/jquery-1.4.2.min.js"></script>
+  </head>
+  <body>
+    <input type="text" value="test" />
+	<input type="button" id="btnTest" value="test" />
+	<pre>
+JClass("com.Test", "stalk.View", {
+  events : {
+    "click #btnTest" : "doTest"
+  },
+  doTest : function(e) {
+    alert(this.$("input:text").val());
+  }
+});
+	</pre>
+  <script type="text/javascript">
     // 在加载com.Person时会自动加载com.Base
-    Class.ready("com.Person",function() {
-      var person = Class.create("com.Person", "lisi");
-      person.say();
-      person.test();
+    JClass.ready("com.Test", function() {
+      JClass.create("com.Test");
     });
   </script>
   </body>
