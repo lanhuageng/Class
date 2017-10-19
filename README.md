@@ -57,9 +57,9 @@ JClass.ready("com.Test", function() {
 	<script type="text/javascript">
     JClassConfig({
       alias : "Class",
-	    debug : true,
-	    global : window,
-	    stalk : "js/stalk",
+      debug : true,
+      global : window,
+      stalk : "js/stalk",
       com : "js/test"
     });
     </script>
