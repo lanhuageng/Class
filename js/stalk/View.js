@@ -12,10 +12,13 @@ JClass("stalk.View", {
           var fn = me[events[key]];
           if (fn) {
 			var event = temp[0], selector = key.substr(event.length + 1);
+			var bfn = function(){
+				fn.apply(me, arguments);
+			};
 			if ($el.on) {
-		      $el.on(event, selector, fn.bind(me));
+		      $el.on(event, selector, bfn);
 			} else {
-			  $el.find(selector).live(event, fn.bind(me));
+			  $el.find(selector).live(event, bfn);
 			}
             continue;
           }
