@@ -1,3 +1,6 @@
+##更新说明
+* 2017-10-19 增加stalk.Log和stalk.View，日志与视图，其中视图用到jquery
+
 ##Class.js是干什么的？
   Class.js是简单的JavaScript类构建器，异步的类加载器
 ##Class.js有哪些功能？
@@ -11,9 +14,28 @@
 
 * 邮件(lanhuageng@126.com)
 
-## 简易API
+## 简单实用
 
-暂无
+* 在head或body引用JClass.js，并在引用后初始化它
+
+```javascript
+JClassConfig({
+  alias : "Class", // my js中全局使用的别名
+  debug : true, // 调试，为true时自动根据类名加载；为false时，需要手动加载
+  global : window, // 全局变量挂载处
+  stalk : "js/stalk", // stalk包对应路径
+  com : "js/test" // com包对应路径，若存在其他包，依次编辑即可
+});
+```
+
+* 引用其他第三方js、css，以及JClass相关脚本（如压缩后的JClass相关类）
+* 入口代码编写
+
+```javascript
+JClass.ready("com.Test", function() {
+  JClass.create("com.Test");
+});
+```
 
 ##使用案例
 
