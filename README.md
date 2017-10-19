@@ -2,11 +2,11 @@
 * 2017-10-19 增加stalk.Log和stalk.View，日志与视图，其中视图用到jquery
 
 
-## Class.js是干什么的？
-  Class.js是简单的JavaScript类构建器，异步的类加载器
+## JClass.js是干什么的？
+  JClass.js是简单的JavaScript类构建器，异步的类加载器
 
 
-## Class.js有哪些功能？
+## JClass.js有哪些功能？
 * 支持类的继承
 * 开发时，一个文件一个类存放，方便维护。发布时可使用流行的第三方插件将自定义类压缩合并为一个js加载，提高web加载效率
 * 不依赖任何js插件，可单独存在，亦可与任何第三方js插件混用
@@ -20,7 +20,7 @@
 
 ## 简单实用
 
-* 在head或body引用JClass.js，并在引用后初始化它
+* 在head或body引用JClass.js，并使用JClassConfig初始化它
 
 ```javascript
 JClassConfig({
