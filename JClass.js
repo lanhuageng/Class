@@ -6,7 +6,7 @@
 
 	var config = {
 		// alias name
-		alias : "JClass",
+		alias : [ "JClass" ],
 		// debug:ajax load class, not debug:compress js load.
 		debug : false,
 		// store classes, private if null.
@@ -342,8 +342,21 @@
 			}
 		}
 		
-		var alias = cfg.config || "JClass";
-		g[alias] = JClass;
-		g.classAlias = alias;
+		if (!isArray(config.alias)) {
+			config.alias = [ config.alias ];
+		}
+		if (!inArray("JClass", config.alias)){
+			config.alias.push("JClass");
+		}
+		
+		var arr = config.alias, len = arr.length;
+		for (var i = 0; i < len; i++) {
+			var name = arr[i];
+			if (g[name]) {
+				throw "The aliasName '" + name + "' is occupied.";
+			}
+			g[arr[i]] = JClass;
+		}
+		g.classAlias = config.alias;
 	};
 })(this);
