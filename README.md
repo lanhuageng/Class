@@ -54,7 +54,7 @@ JClass.ready("com.Test", function() {
 <html>
   <head>
     <script type="text/javascript" src="JClass.js"></script>
-	<script type="text/javascript">
+    <script type="text/javascript">
     JClassConfig({
       alias : "Class",
       debug : true,
@@ -63,8 +63,8 @@ JClass.ready("com.Test", function() {
       com : "js/test"
     });
     </script>
-	<script type="text/javascript" src="js/stalk/Log.js"></script>
-	<script type="text/javascript" src="js/jquery-1.4.2.min.js"></script>
+    <script type="text/javascript" src="js/stalk/Log.js"></script>
+    <script type="text/javascript" src="js/jquery-1.4.2.min.js"></script>
   </head>
   <body>
     <input type="text" value="test" />
