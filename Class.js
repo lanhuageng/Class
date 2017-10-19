@@ -1,29 +1,26 @@
 /**
- * current alias name : Class<br>
- * Class("com.Test", {});
+ * current alias name : JClass<br>
+ * JClass("com.Test", {});
  */
-+(function(g, alias) {
++(function(g) {
 
-	alias = alias || "Class"; // alias name default:Class
 	var config = {
-		// class name must equal file name.
-		strict : true,
+		// alias name
+		alias : "JClass",
 		// debug:ajax load class, not debug:compress js load.
 		debug : false,
+		// store classes, private if null.
+		global : null,
 		// in debug mode, paths mapping for class of roots.
-		mapping : {},
-		// timeout for load script.
-		timeout : 30000
+		mapping : {}
 	};
 	var loading = {}, classes = {}, ready;
 	var NONE = undefined, LOADING = 1, SUCCESS = 2, FAIL = 3;
 	var regClassName = /^[_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+$/;
-	// var regImport = /Class\((["'"])([_a-zA-Z]\w*(\.[_a-zA-Z]\w*)+)\1,/;
-	var regImport = new RegExp(alias + "\\(([\"'\"])([_a-zA-Z]\\w*(\\.[_a-zA-Z]\\w*)+)\\1,");
 	var keyField = [ "_class", "_className", "_superClass", "parent", "callParent" ];
 
 	// main method.
-	function Class(className, parentName, cfg) {
+	function JClass(className, parentName, cfg) {
 		var args = arguments, len = args.length;
 		if (len == 2) {
 			cfg = args[1];
@@ -44,63 +41,38 @@
 	}
 
 	function OnceDeferred() {
-		var clazz = Function(), fns = [];
+		var clazz = Function();
 		copy(clazz, {
 			isTriggered : false,
+			fns : [],
 			trigger : function() {
-				var me = this;
+				var me = this, fns = me.fns;
 				me.isTriggered = true;
-				for (var i = 0; i < fns.length; i++) {
-					fns[i](me);
+				while(fns.length) {
+					setTimeout(fns[0], 1);
+					fns.splice(0, 1);
 				}
-				fns = [];
 			},
 			add : function(fn) {
 				var me = this;
-				fns.push(fn);
-				me.isTriggered && me.trigger();
+				if (me.isTriggered) {
+					fn(me);
+				} else {
+					me.fns.push(fn);
+				}
 			}
 		});
 		return clazz;
 	}
-	function loadScript(url, fn, sync) {
-		if (isLocal()) {
-			return localLoadScript(url, fn, sync);
-		}
-		var xhr = null;
-		if (window.XMLHttpRequest) {
-			xhr = new XMLHttpRequest();
-		} else if (window.ActiveXObject) {
-			xhr = new ActiveXObject("Microsoft.XMLHTTP");
-		}
-		valid(xhr, "Error:create XMLHttpRequest.");
-
-		xhr.onreadystatechange = function(resp) {
-			if (xhr.readyState == 4) {
-				fn(xhr.status == 200, xhr.responseText, xhr.status);
-			}
-		};
-		if (!sync) {
-			xhr.timeout = config.timeout;
-		}
-		xhr.open("GET", url, !sync);
-		try {
-			xhr.send();
-		} catch (e) {
-			console.warn(e);
-			fn(false, "", xhr.status);
-		}
-	}
-	function localLoadScript(url, fn, sync) {
+	function loadScript(url, className) {
 		var script = document.createElement("script");
 		script.src = url;
-		script.async = !sync;
+		script.async = true;
 		script.onload = function() {
-			fn(true);
 			document.head.removeChild(script);
 		}
 		script.onerror = function() {
-			fn(false);
+			checkReady(className, false);
 			document.head.removeChild(script);
 		}
 		document.head.appendChild(script);
@@ -148,9 +120,6 @@
 		}
 		return true;
 	}
-	function isLocal() {
-		return location.href.indexOf("file://") != -1
-	}
 	function isDefined(className) {
 		return null != getClass(className);
 	}
@@ -167,12 +136,6 @@
 			});
 			loading[className] = LOADING;
 			ready.isTriggered = false;
-			setTimeout(function() {
-				if (SUCCESS != info.state && FAIL != info.state) {
-					info.state = FAIL;
-					console.warn("Load script timeout:" + className);
-				}
-			}, config.timeout);
 		}
 		return info;
 	}
@@ -180,16 +143,15 @@
 		var info = getClassInfo(className);
 		return SUCCESS == info.state ? info._class : null;
 	}
-	function add(className, fn) {
-		getClassInfo(className).notify.add(fn);
-	}
-	function checkReady(className) {
-		if (className) {
+	function checkReady(className, success) {
+		if (success) {
 			delete loading[className];
+		} else {
+			loading[className] = FAIL;
 		}
 		var count = 0;
 		for ( var k in loading) {
-			if (loading.hasOwnProperty(k)) {
+			if (loading.hasOwnProperty(k) && (loading[k] == LOADING || loading[k] == NONE)) {
 				count++;
 			}
 		}
@@ -211,54 +173,42 @@
 			valid(isString(className) && regClassName.test(className), "Preload class name error:" + className);
 		}
 
-		if (isDefined(className)) {
-			fn();
-		} else {
-			var info = getClassInfo(className), state = info.state;
-			info.notify.add(fn);
-			if (LOADING != state) {
-				valid(FAIL != state, "Last load class fail:" + className);
-				if (config.debug) {
-					var arr = className.split("."), root = arr[0], prefix = config.mapping[root];
-					valid(prefix, "Not found “" + root + "” mapping.");
+		var info = getClassInfo(className), state = info.state;
+		info.notify.add(fn);
+		
+		if (LOADING != state) {
+			info.state = LOADING;
+			valid(FAIL != state, "Last load class fail:" + className);
+			if (config.debug) {
+				var arr = className.split("."), root = arr[0], prefix = config.mapping[root];
+				valid(prefix, "Not found “" + root + "” mapping.");
 
-					arr[0] = prefix;
-					var url = arr.join("/") + ".js";
-					loadScript(url, function(success, text, status) {
-						if (success) {
-							if (isLocal()) {
-								return console.warn("Local script load, not confirm result:" + url);
-							}
-							var time = new Date().getTime() - info.start;
-							if (time < config.timeout) {
-								var temp = regImport.exec(text), target = (temp || [])[2];
-								valid(target, "Load script '" + url + "' error.");
-								if (config.strict) {
-									valid(target == className, "Import class:" + className + ", but really import:" + target);
-								}
-								eval(text);
-							}
-						} else {
-							info.state = FAIL;
-							console.error("Load script error:" + className);
-						}
-					});
-				}
+				arr[0] = prefix;
+				var url = arr.join("/") + ".js";
+				loadScript(url, className);
 			}
 		}
 	}
 	function importClasses(imports, fn) {
-		var len = imports.length;
-		+function(i) {
-			var current = arguments;
-			if (i < len) {
-				importClass(imports[i], function() {
-					current.callee(i + 1);
-				}, true);
-			} else {
+		var len = imports.length, loaded = 0;
+		var callFn = function() {
+			loaded++;
+			if (len == loaded) {
 				fn();
 			}
-		}(0);
+		}
+		for (var i = 0; i < len; i++) {
+			importClass(imports[i], callFn, true);
+		}
+	}
+	function set(o, key, value) {
+		var idx = key.indexOf(".");
+		if (idx > 0) {
+			var c = o[key.substring(0, idx)] = {};
+			set(c, key.substr(idx + 1), value);
+		} else {
+			o[key] = value;
+		}
 	}
 
 	function build(className, parentName, cfg) {
@@ -286,11 +236,16 @@
 				if (isFunction(clazz.initialize)) {
 					clazz.initialize();
 				}
+				
+				if (config.global) {
+					set(config.global, className, clazz);
+				}
+				
 				info._class = clazz;
 				info.state = SUCCESS;
 				info.notify.trigger();
 
-				checkReady(className);
+				checkReady(className, true);
 			});
 
 			var imports = cfg.imports;
@@ -341,7 +296,7 @@
 	ready = OnceDeferred();
 	ready.isTriggered = true;
 
-	copy(Class, {
+	copy(JClass, {
 		ready : function(imports, fn) {
 			if (isFunction(imports)) {
 				ready.add(imports);
@@ -349,23 +304,6 @@
 				importClasses(isArray(imports) ? imports : [ imports ], function() {
 					isFunction(fn) && ready.add(fn);
 				});
-			}
-		},
-		config : function(cfg) {
-			if (isObject(cfg)) {
-				for ( var k in config) {
-					if ("mapping" != k) {
-						config[k] = defaults(cfg[k], config[k]);
-						delete cfg[k];
-					}
-				}
-
-				for ( var k in cfg) {
-					var v = cfg[k];
-					if (cfg.hasOwnProperty(k) && isString(v)) {
-						config.mapping[k] = v;
-					}
-				}
 			}
 		},
 		create : function(className) {
@@ -385,6 +323,27 @@
 		isDefined : isDefined,
 		getClass : getClass
 	});
+	
+	g.JClassConfig = function(cfg) {
+		valid(cfg, "None JClassConfig.");
+		
+		config.alias = defaults(cfg.alias, config.alias);
+		config.debug = defaults(cfg.debug, config.debug);
+		config.global = defaults(cfg.global, config.global);
+		
+		delete cfg.alias;
+		delete cfg.debug;
+		delete cfg.global;
 
-	g[alias] = Class;
+		for ( var k in cfg) {
+			var v = cfg[k];
+			if (cfg.hasOwnProperty(k) && isString(v)) {
+				config.mapping[k] = v;
+			}
+		}
+		
+		var alias = cfg.config || "JClass";
+		g[alias] = JClass;
+		g.classAlias = alias;
+	};
 })(this);
